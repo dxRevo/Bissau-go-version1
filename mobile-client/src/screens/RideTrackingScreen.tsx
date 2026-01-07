@@ -9,6 +9,8 @@ import { spacing, shadows } from '../theme/spacing';
 import { ridesService } from '../services/ridesService';
 import { googleMapsService } from '../services/googleMapsService';
 import { formatPrice } from '../utils/priceFormatter';
+import { websocketService } from '../services/websocketService';
+import DraggableBottomSheet from '../components/DraggableBottomSheet';
 
 const { width } = Dimensions.get('window');
 
@@ -20,7 +22,26 @@ export default function RideTrackingScreen({ navigation, route }: any) {
   const [routeCoordinates, setRouteCoordinates] = useState<{ latitude: number; longitude: number }[]>([]);
 
   useEffect(() => {
-    if (!rideId) return;
+    if (!rideId) {
+      // Si pas de rideId, vérifier s'il y a une course active
+      const checkActiveRide = async () => {
+        try {
+          const activeRide = await ridesService.getActiveRide();
+          if (activeRide) {
+            // Naviguer vers la course active
+            navigation.replace('RideTracking', { rideId: activeRide.id });
+          } else {
+            // Pas de course active, retourner à l'accueil
+            navigation.replace('MainTabs', { screen: 'Home' });
+          }
+        } catch (error) {
+          console.error('Error checking active ride:', error);
+          navigation.replace('MainTabs', { screen: 'Home' });
+        }
+      };
+      checkActiveRide();
+      return;
+    }
 
     const fetchRide = async () => {
       try {
@@ -59,29 +80,118 @@ export default function RideTrackingScreen({ navigation, route }: any) {
           }
         }
 
+        // Gérer les changements de statut
         if (rideData.status === 'COMPLETED') {
           navigation.replace('RateRide', { rideId: rideData.id });
         } else if (rideData.status === 'CANCELLED') {
-          navigation.goBack();
+          Alert.alert(
+            'Course annulée',
+            'La course a été annulée.',
+            [
+              {
+                text: 'OK',
+                onPress: () => navigation.replace('MainTabs', { screen: 'Home' }),
+              },
+            ]
+          );
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error fetching ride:', error);
+        // Si la course n'existe plus, retourner à l'accueil
+        if (error.response?.status === 404) {
+          Alert.alert(
+            'Course introuvable',
+            'Cette course n\'existe plus ou a été supprimée.',
+            [
+              {
+                text: 'OK',
+                onPress: () => navigation.replace('MainTabs', { screen: 'Home' }),
+              },
+            ]
+          );
+        }
       }
     };
 
     fetchRide();
-    const interval = setInterval(fetchRide, 5000);
+    
+    // Écouter les mises à jour WebSocket
+    const handleStatusChange = (data: any) => {
+      if (data.rideId === rideId) {
+        console.log('🔄 Ride status changed via WebSocket:', data);
+        fetchRide(); // Rafraîchir les données
+      }
+    };
 
-    return () => clearInterval(interval);
+    // Écouter les mises à jour de position GPS du driver
+    const handleDriverLocationUpdate = (data: any) => {
+      if (data.rideId === rideId && data.location) {
+        console.log('📍 Driver location updated via WebSocket:', data.location);
+        setDriverLocation(data.location);
+        
+        // Centrer la carte sur le driver si le trajet est en cours
+        if (ride?.status === 'IN_PROGRESS' && mapRef.current) {
+          mapRef.current.animateToRegion({
+            latitude: data.location.latitude,
+            longitude: data.location.longitude,
+            latitudeDelta: 0.005,
+            longitudeDelta: 0.005,
+          }, 1000);
+        }
+      }
+    };
+
+    websocketService.on('ride_status_changed', handleStatusChange);
+    websocketService.on('driver_location_update', handleDriverLocationUpdate);
+
+    // Polling pour les mises à jour en temps réel
+    const interval = setInterval(fetchRide, 3000);
+
+    return () => {
+      clearInterval(interval);
+      websocketService.off('ride_status_changed', handleStatusChange);
+      websocketService.off('driver_location_update', handleDriverLocationUpdate);
+    };
   }, [rideId, navigation]);
 
   const handleCancel = () => {
+    if (!ride) return;
+
+    // Vérifier si l'annulation est possible
+    const canCancel = ['PENDING', 'ACCEPTED', 'DRIVER_ARRIVED'].includes(ride.status);
+    
+    if (!canCancel) {
+      // Afficher un message explicatif selon le statut
+      let message = '';
+      switch (ride.status) {
+        case 'IN_PROGRESS':
+          message = 'La course est en cours. Vous ne pouvez plus l\'annuler. Contactez le support si nécessaire.';
+          break;
+        case 'COMPLETED':
+          message = 'Cette course est déjà terminée.';
+          break;
+        case 'CANCELLED':
+          message = 'Cette course a déjà été annulée.';
+          break;
+        default:
+          message = 'Cette course ne peut pas être annulée dans son état actuel.';
+      }
+      
+      Alert.alert(
+        'Annulation impossible',
+        message,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    // Confirmation d'annulation
     Alert.alert(
       'Annuler la course',
-      'Êtes-vous sûr de vouloir annuler cette course ?',
+      'Êtes-vous sûr de vouloir annuler cette course ? Cette action est irréversible.',
       [
         {
-          text: 'Non',
+          text: 'Non, garder',
           style: 'cancel',
         },
         {
@@ -90,12 +200,21 @@ export default function RideTrackingScreen({ navigation, route }: any) {
           onPress: async () => {
             try {
               await ridesService.cancelRide(rideId);
-              Alert.alert('Succès', 'La course a été annulée');
-              navigation.goBack();
+              Alert.alert(
+                'Course annulée',
+                'Votre course a été annulée avec succès.',
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => navigation.goBack(),
+                  },
+                ]
+              );
             } catch (error: any) {
               Alert.alert(
                 'Erreur',
-                error.response?.data?.message || 'Impossible d\'annuler la course'
+                error.response?.data?.message || 'Impossible d\'annuler la course. Veuillez réessayer.',
+                [{ text: 'OK' }]
               );
             }
           },
@@ -157,11 +276,12 @@ export default function RideTrackingScreen({ navigation, route }: any) {
           <Marker
             coordinate={driverLocation}
             title="Conducteur"
-            pinColor={colors.primary}
             anchor={{ x: 0.5, y: 0.5 }}
+            flat={true}
+            rotation={0}
           >
             <View style={styles.driverMarker}>
-              <Ionicons name="car" size={32} color={colors.primary} />
+              <Ionicons name="car" size={36} color={colors.primary} />
             </View>
           </Marker>
         )}
@@ -187,10 +307,13 @@ export default function RideTrackingScreen({ navigation, route }: any) {
         <View style={styles.placeholder} />
       </View>
 
-      {/* Bottom Sheet */}
-      <View style={styles.bottomSheet}>
-        <View style={styles.bottomSheetHandle} />
-
+      {/* Bottom Sheet Draggable */}
+      <DraggableBottomSheet
+        initialHeight={Dimensions.get('window').height * 0.4}
+        minHeight={120}
+        maxHeight={Dimensions.get('window').height * 0.85}
+        snapPoints={[120, Dimensions.get('window').height * 0.4, Dimensions.get('window').height * 0.7]}
+      >
         <View style={styles.driverInfo}>
           <View style={styles.driverAvatar}>
             <Ionicons name="person-outline" size={32} color={colors.primary} />
@@ -244,18 +367,57 @@ export default function RideTrackingScreen({ navigation, route }: any) {
           </View>
         )}
 
-        {/* Bouton d'annulation */}
-        {canCancel && (
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={handleCancel}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="close-outline" size={20} color={colors.error} />
-            <Text style={styles.cancelButtonText}>Annuler la course</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+        {/* Statut de la course */}
+        <View style={styles.statusContainer}>
+          {ride.status === 'PENDING' && (
+            <View style={styles.statusBadge}>
+              <Ionicons name="time-outline" size={16} color={colors.warning} />
+              <Text style={styles.statusText}>En attente d'un conducteur...</Text>
+            </View>
+          )}
+          {ride.status === 'ACCEPTED' && (
+            <View style={styles.statusBadge}>
+              <Ionicons name="car-outline" size={16} color={colors.primary} />
+              <Text style={styles.statusText}>Conducteur en route</Text>
+            </View>
+          )}
+          {ride.status === 'DRIVER_ARRIVED' && (
+            <View style={[styles.statusBadge, { backgroundColor: colors.success + '20' }]}>
+              <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+              <Text style={[styles.statusText, { color: colors.success }]}>Conducteur arrivé</Text>
+            </View>
+          )}
+          {ride.status === 'IN_PROGRESS' && (
+            <View style={[styles.statusBadge, { backgroundColor: colors.primary + '20' }]}>
+              <Ionicons name="play-circle" size={16} color={colors.primary} />
+              <Text style={[styles.statusText, { color: colors.primary }]}>Trajet en cours</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Bouton d'annulation - Toujours visible */}
+        <TouchableOpacity
+          style={[
+            styles.cancelButton,
+            !canCancel && styles.cancelButtonDisabled
+          ]}
+          onPress={handleCancel}
+          activeOpacity={0.8}
+          disabled={!canCancel}
+        >
+          <Ionicons 
+            name={canCancel ? "close-circle" : "close-circle-outline"} 
+            size={20} 
+            color={canCancel ? colors.error : colors.textSecondary} 
+          />
+          <Text style={[
+            styles.cancelButtonText,
+            !canCancel && styles.cancelButtonTextDisabled
+          ]}>
+            {canCancel ? 'Annuler la course' : 'Annulation non disponible'}
+          </Text>
+        </TouchableOpacity>
+      </DraggableBottomSheet>
     </SafeAreaView>
   );
 }
@@ -305,27 +467,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.primary,
     ...shadows.md,
-  },
-  bottomSheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: colors.background,
-    borderTopLeftRadius: spacing.xl,
-    borderTopRightRadius: spacing.xl,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xl,
-    paddingHorizontal: spacing.lg,
-    ...shadows.lg,
-  },
-  bottomSheetHandle: {
-    width: 40,
-    height: 4,
-    backgroundColor: colors.border,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: spacing.lg,
   },
   driverInfo: {
     flexDirection: 'row',
@@ -420,15 +561,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.backgroundLight,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.error,
     borderRadius: spacing.lg,
     padding: spacing.md,
     marginTop: spacing.lg,
     gap: spacing.sm,
+    minHeight: 52,
+  },
+  cancelButtonDisabled: {
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundLight,
+    opacity: 0.6,
   },
   cancelButtonText: {
     ...typography.bodyBold,
     color: colors.error,
+    fontSize: 16,
+  },
+  cancelButtonTextDisabled: {
+    color: colors.textSecondary,
+  },
+  statusContainer: {
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.backgroundLight,
+    padding: spacing.md,
+    borderRadius: spacing.md,
+    gap: spacing.sm,
+  },
+  statusText: {
+    ...typography.bodyBold,
+    color: colors.text,
   },
 });

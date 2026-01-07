@@ -16,4 +16,9 @@ export class DriversController {
   async getProfile(@Request() req: any) {
     return this.driversService.getDriverProfile(req.user.userId);
   }
+
+  @Post('location')
+  async updateLocation(@Body() body: { latitude: number; longitude: number }, @Request() req: any) {
+    return this.driversService.updateLocation(req.user.userId, body.latitude, body.longitude);
+  }
 }

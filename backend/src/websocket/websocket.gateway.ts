@@ -63,12 +63,28 @@ export class WebSocketGateway implements OnGatewayConnection, OnGatewayDisconnec
         // Gérer l'expiration du token et autres erreurs JWT
         if (error.name === 'TokenExpiredError') {
           this.logger.warn(`Client ${client.id} connected with expired token`);
+          // Envoyer un message d'erreur avant de déconnecter
+          client.emit('error', { 
+            type: 'TOKEN_EXPIRED', 
+            message: 'Token expired. Please reconnect with a new token.' 
+          });
         } else if (error.name === 'JsonWebTokenError') {
           this.logger.warn(`Client ${client.id} connected with invalid token: ${error.message}`);
+          client.emit('error', { 
+            type: 'INVALID_TOKEN', 
+            message: 'Invalid token. Please reconnect with a valid token.' 
+          });
         } else {
           this.logger.error(`JWT verification error for client ${client.id}:`, error.message);
+          client.emit('error', { 
+            type: 'AUTH_ERROR', 
+            message: 'Authentication failed.' 
+          });
         }
-        client.disconnect();
+        // Attendre un peu pour que le message d'erreur soit envoyé
+        setTimeout(() => {
+          client.disconnect();
+        }, 100);
         return;
       }
 
@@ -361,6 +377,22 @@ export class WebSocketGateway implements OnGatewayConnection, OnGatewayDisconnec
   @SubscribeMessage('ping')
   handlePing(@ConnectedSocket() client: AuthenticatedSocket) {
     client.emit('pong', { timestamp: Date.now() });
+  }
+
+  /**
+   * Diffuser la position GPS du driver au client
+   */
+  broadcastDriverLocation(userId: string, rideId: string, latitude: number, longitude: number) {
+    this.server.to(`user:${userId}`).emit('driver_location_update', {
+      type: 'DRIVER_LOCATION_UPDATE',
+      rideId,
+      location: {
+        latitude,
+        longitude,
+      },
+      timestamp: new Date().toISOString(),
+    });
+    this.logger.log(`Broadcasted driver location for ride ${rideId} to user ${userId}`);
   }
 }
 

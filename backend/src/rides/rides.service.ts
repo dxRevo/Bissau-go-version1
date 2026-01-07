@@ -49,8 +49,8 @@ export class RidesService {
       );
     }
 
-    // Calculer la distance et la durée
-    const { distance, duration } = await this.pricingService.calculateDistanceAndDuration(
+    // Calculer la distance et la durée (avec trafic réel)
+    const { distance, duration, durationInTraffic } = await this.pricingService.calculateDistanceAndDuration(
       data.pickupLocation.latitude,
       data.pickupLocation.longitude,
       data.dropoffLocation.latitude,
@@ -60,8 +60,8 @@ export class RidesService {
     // Déterminer la catégorie du véhicule
     const category = data.vehicleType === 'CONFORT' ? VehicleCategory.CONFORT : VehicleCategory.ECO;
 
-    // Calculer le prix
-    const pricing = this.pricingService.calculatePrice(distance, duration, category);
+    // Calculer le prix avec tous les facteurs (trafic, heure, demande)
+    const pricing = this.pricingService.calculatePrice(distance, duration, category, durationInTraffic);
 
     const ride = await this.prisma.ride.create({
       data: {
@@ -468,6 +468,10 @@ export class RidesService {
         id,
         driverId,
       },
+      include: {
+        client: true,
+        driver: true,
+      },
     });
 
     if (!ride) {
@@ -505,10 +509,90 @@ export class RidesService {
         // Try to match directly
         rideStatus = normalizedStatus as RideStatus;
     }
+
+    // Valider les transitions de statut
+    const validTransitions: Record<RideStatus, RideStatus[]> = {
+      [RideStatus.PENDING]: [RideStatus.ACCEPTED, RideStatus.CANCELLED],
+      [RideStatus.ACCEPTED]: [RideStatus.DRIVER_ARRIVED, RideStatus.CANCELLED],
+      [RideStatus.DRIVER_ARRIVED]: [RideStatus.IN_PROGRESS, RideStatus.CANCELLED],
+      [RideStatus.IN_PROGRESS]: [RideStatus.COMPLETED],
+      [RideStatus.COMPLETED]: [],
+      [RideStatus.CANCELLED]: [],
+    };
+
+    const allowedStatuses = validTransitions[ride.status];
+    if (!allowedStatuses.includes(rideStatus)) {
+      throw new BadRequestException(
+        `Cannot transition from ${ride.status} to ${rideStatus}. Allowed transitions: ${allowedStatuses.join(', ')}`
+      );
+    }
+
+    // Préparer les données de mise à jour
+    const updateData: any = { status: rideStatus };
     
-    return this.prisma.ride.update({
+    // Ajouter les timestamps selon le statut
+    if (rideStatus === RideStatus.DRIVER_ARRIVED) {
+      updateData.arrivedAt = new Date();
+    } else if (rideStatus === RideStatus.IN_PROGRESS) {
+      updateData.startedAt = new Date();
+    } else if (rideStatus === RideStatus.COMPLETED) {
+      updateData.completedAt = new Date();
+    }
+
+    // Mettre à jour le statut
+    const updatedRide = await this.prisma.ride.update({
       where: { id },
-      data: { status: rideStatus },
+      data: updateData,
+      include: {
+        client: true,
+        driver: true,
+      },
     });
+
+    // Notifier le client via WebSocket
+    try {
+      this.websocketGateway.notifyRideStatusChange(ride.clientId, id, rideStatus);
+      this.websocketGateway.notifyDriverRideStatusChange(driverId, id, rideStatus);
+
+      // Messages spécifiques selon le statut
+      if (rideStatus === RideStatus.DRIVER_ARRIVED) {
+        this.notificationsService.notifyClient(
+          ride.clientId,
+          'Votre conducteur est arrivé',
+          `${ride.driver?.firstName || 'Le conducteur'} est arrivé au point de départ`,
+          { rideId: id, type: 'DRIVER_ARRIVED' }
+        );
+      } else if (rideStatus === RideStatus.IN_PROGRESS) {
+        this.notificationsService.notifyClient(
+          ride.clientId,
+          'Trajet démarré',
+          'Votre trajet a commencé',
+          { rideId: id, type: 'RIDE_STARTED' }
+        );
+      } else if (rideStatus === RideStatus.COMPLETED) {
+        this.notificationsService.notifyClient(
+          ride.clientId,
+          'Trajet terminé',
+          'Votre trajet est terminé. N\'oubliez pas de noter votre conducteur !',
+          { rideId: id, type: 'RIDE_COMPLETED' }
+        );
+      }
+    } catch (error) {
+      console.error('Error sending notifications for ride status update:', error);
+    }
+    
+    return {
+      ...updatedRide,
+      pickupLocation: {
+        latitude: updatedRide.pickupLatitude,
+        longitude: updatedRide.pickupLongitude,
+        address: updatedRide.pickupAddress,
+      },
+      dropoffLocation: {
+        latitude: updatedRide.dropoffLatitude,
+        longitude: updatedRide.dropoffLongitude,
+        address: updatedRide.dropoffAddress,
+      },
+    };
   }
 }

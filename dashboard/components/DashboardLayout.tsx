@@ -33,7 +33,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center justify-center h-16 bg-blue-600">
-            <h1 className="text-xl font-bold text-white">Vetigo Dashboard</h1>
+            <h1 className="text-xl font-bold text-white">Bissau Go Dashboard</h1>
           </div>
 
           {/* Navigation */}

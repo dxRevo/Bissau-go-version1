@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Vetigo Driver",
-    "slug": "vetigo-driver",
-    "scheme": "vetigo-driver",
+    "name": "Bissau Go Driver",
+    "slug": "bissau-go-driver",
+    "scheme": "bissau-go-driver",
     "version": "1.0.0",
     "extra": {
       "apiUrl": "http://192.168.1.5:3008/api",
@@ -21,14 +21,14 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.vetigo.driver"
+      "bundleIdentifier": "com.bissaugo.driver"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.vetigo.driver"
+      "package": "com.bissaugo.driver"
     },
     "web": {
       "favicon": "./assets/favicon.png"

@@ -7,6 +7,8 @@ import * as Location from 'expo-location';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import { spacing, shadows } from '../theme/spacing';
+import { notificationsService } from '../services/notificationsService';
+import { ridesService } from '../services/ridesService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -16,7 +18,29 @@ export default function HomeScreen({ navigation }: any) {
 
   useEffect(() => {
     getCurrentLocation();
-  }, []);
+    
+    // Configurer les listeners de notifications
+    const cleanup = notificationsService.setupNotificationListeners(
+      (notification) => {
+        console.log('📱 Notification received:', notification);
+      },
+      (response) => {
+        console.log('📱 Notification tapped:', response);
+        const data = response.notification.request.content.data;
+        
+        // Naviguer vers l'écran de suivi si c'est une notification de course
+        if (data?.type === 'RIDE_ACCEPTED' || data?.type === 'RIDE_STATUS_CHANGED' || data?.rideId) {
+          const rideId = data.rideId;
+          if (rideId) {
+            // Utiliser replace pour éviter les problèmes de stack
+            navigation.replace('RideTracking', { rideId });
+          }
+        }
+      },
+    );
+
+    return cleanup;
+  }, [navigation]);
 
   const getCurrentLocation = async () => {
     try {

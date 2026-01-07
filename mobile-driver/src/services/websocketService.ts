@@ -73,6 +73,18 @@ class WebSocketService {
       console.log('📡 WebSocket connected:', data);
     });
 
+    // Écouter les erreurs d'authentification
+    this.socket.on('error', (error: any) => {
+      console.error('❌ WebSocket error:', error);
+      if (error.type === 'TOKEN_EXPIRED' || error.type === 'INVALID_TOKEN') {
+        console.warn('⚠️ Token expired or invalid, will attempt to reconnect with new token');
+        // Le client devra se reconnecter avec un nouveau token
+        this.emit('token_expired', error);
+      } else {
+        this.emit('error', error);
+      }
+    });
+
     // Écouter les nouvelles courses
     this.socket.on('new_ride', (data) => {
       console.log('🚗 New ride received via WebSocket:', data);

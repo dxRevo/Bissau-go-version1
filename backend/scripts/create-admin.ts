@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function createAdmin() {
-  const email = process.env.ADMIN_EMAIL || 'admin@vetigo.com';
+  const email = process.env.ADMIN_EMAIL || 'admin@bissaugo.com';
   const password = process.env.ADMIN_PASSWORD || 'admin123';
   const firstName = process.env.ADMIN_FIRST_NAME || 'Admin';
   const lastName = process.env.ADMIN_LAST_NAME || 'User';

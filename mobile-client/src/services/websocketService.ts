@@ -59,6 +59,18 @@ class WebSocketService {
       console.log('📡 WebSocket connected:', data);
     });
 
+    // Écouter les erreurs d'authentification
+    this.socket.on('error', (error: any) => {
+      console.error('❌ WebSocket error:', error);
+      if (error.type === 'TOKEN_EXPIRED' || error.type === 'INVALID_TOKEN') {
+        console.warn('⚠️ Token expired or invalid, will attempt to reconnect with new token');
+        // Le client devra se reconnecter avec un nouveau token
+        this.emit('token_expired', error);
+      } else {
+        this.emit('error', error);
+      }
+    });
+
     this.socket.on('ride_accepted', (data) => {
       console.log('✅ Ride accepted via WebSocket:', data);
       this.emit('ride_accepted', data);
@@ -72,6 +84,12 @@ class WebSocketService {
     this.socket.on('ride_status_changed', (data) => {
       console.log('🔄 Ride status changed via WebSocket:', data);
       this.emit('ride_status_changed', data);
+    });
+
+    // Écouter les mises à jour de position GPS du driver
+    this.socket.on('driver_location_update', (data) => {
+      console.log('📍 Driver location updated via WebSocket:', data);
+      this.emit('driver_location_update', data);
     });
   }
 

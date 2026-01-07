@@ -141,11 +141,12 @@ export const googleMapsService = {
   async calculateDistanceAndDuration(
     origin: { latitude: number; longitude: number },
     destination: { latitude: number; longitude: number }
-  ): Promise<{ distance: number; duration: number }> {
+  ): Promise<{ distance: number; duration: number; durationInTraffic?: number }> {
     try {
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin.latitude},${origin.longitude}&destinations=${destination.latitude},${destination.longitude}&key=${GOOGLE_MAPS_API_KEY}&units=metric&language=fr`
-      );
+      // Inclure le trafic réel dans le calcul
+      const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin.latitude},${origin.longitude}&destinations=${destination.latitude},${destination.longitude}&key=${GOOGLE_MAPS_API_KEY}&units=metric&language=fr&departure_time=now&traffic_model=best_guess`;
+      
+      const response = await fetch(url);
       const data = await response.json();
       
       if (data.status === 'OK' && data.rows && data.rows[0] && data.rows[0].elements && data.rows[0].elements[0]) {
@@ -153,12 +154,17 @@ export const googleMapsService = {
         if (element.status === 'OK') {
           // Distance en km
           const distance = element.distance.value / 1000; // Convertir mètres en km
-          // Durée en minutes
+          // Durée en minutes (sans trafic)
           const duration = element.duration.value / 60; // Convertir secondes en minutes
+          // Durée avec trafic si disponible
+          const durationInTraffic = element.duration_in_traffic 
+            ? element.duration_in_traffic.value / 60 
+            : duration;
           
           return {
             distance: Math.round(distance * 100) / 100, // Arrondir à 2 décimales
             duration: Math.round(duration),
+            durationInTraffic: Math.round(durationInTraffic),
           };
         }
       }

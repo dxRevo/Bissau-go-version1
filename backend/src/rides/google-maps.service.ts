@@ -16,7 +16,8 @@ export class GoogleMapsService {
   async calculateDistanceAndDuration(
     origin: { latitude: number; longitude: number },
     destination: { latitude: number; longitude: number },
-  ): Promise<{ distance: number; duration: number }> {
+    includeTraffic: boolean = true,
+  ): Promise<{ distance: number; duration: number; durationInTraffic?: number }> {
     if (!this.apiKey) {
       // Fallback vers Haversine si pas de clé API
       return this.calculateDistanceAndDurationHaversine(origin, destination);
@@ -24,15 +25,20 @@ export class GoogleMapsService {
 
     try {
       const url = `${this.baseUrl}/distancematrix/json`;
-      const response = await axios.get(url, {
-        params: {
-          origins: `${origin.latitude},${origin.longitude}`,
-          destinations: `${destination.latitude},${destination.longitude}`,
-          key: this.apiKey,
-          units: 'metric',
-          language: 'fr',
-        },
-      });
+      const params: any = {
+        origins: `${origin.latitude},${origin.longitude}`,
+        destinations: `${destination.latitude},${destination.longitude}`,
+        key: this.apiKey,
+        units: 'metric',
+        language: 'fr',
+        departure_time: includeTraffic ? 'now' : undefined, // Utiliser le trafic réel si demandé
+        traffic_model: includeTraffic ? 'best_guess' : undefined, // Modèle de trafic optimal
+      };
+
+      // Retirer les paramètres undefined
+      Object.keys(params).forEach(key => params[key] === undefined && delete params[key]);
+
+      const response = await axios.get(url, { params });
 
       if (
         response.data.status === 'OK' &&
@@ -45,12 +51,17 @@ export class GoogleMapsService {
         if (element.status === 'OK') {
           // Distance en km
           const distance = element.distance.value / 1000; // Convertir mètres en km
-          // Durée en minutes
+          // Durée en minutes (sans trafic)
           const duration = element.duration.value / 60; // Convertir secondes en minutes
+          // Durée avec trafic si disponible
+          const durationInTraffic = element.duration_in_traffic 
+            ? element.duration_in_traffic.value / 60 
+            : duration;
 
           return {
             distance: Math.round(distance * 100) / 100, // Arrondir à 2 décimales
             duration: Math.round(duration),
+            durationInTraffic: Math.round(durationInTraffic),
           };
         }
       }

@@ -11,8 +11,8 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService } from '../services/authService';
+import { useAuthStore } from '../store/authStore';
 import { colors } from '../theme/colors';
 
 export default function LoginScreen({ navigation }: any) {
@@ -21,6 +21,7 @@ export default function LoginScreen({ navigation }: any) {
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [loading, setLoading] = useState(false);
+  const setAuth = useAuthStore((state) => state.setAuth);
 
   const handleRequestOtp = async () => {
     if (!phoneNumber) {
@@ -57,15 +58,41 @@ export default function LoginScreen({ navigation }: any) {
     try {
       const response = await authService.verifyOtp(phoneNumber, otp);
       
-      // Save token to AsyncStorage
-      if (response.accessToken) {
-        await AsyncStorage.setItem('authToken', response.accessToken);
-      }
+      console.log('OTP verification response:', response);
       
-      // Navigation will happen automatically when isAuthenticated changes
-      // No need to navigate manually
+      // Vérifier que la réponse contient les données nécessaires
+      if (response.accessToken) {
+        // Le backend retourne soit 'user' soit 'driver'
+        const userData = response.user || response.driver;
+        
+        if (userData) {
+          // Mapper les données utilisateur au format attendu
+          const user = {
+            id: userData.id,
+            phoneNumber: userData.phoneNumber,
+            firstName: userData.firstName || phoneNumber,
+            lastName: userData.lastName || '',
+          };
+          
+          // Mettre à jour le store d'authentification
+          await setAuth(user, response.accessToken);
+          
+          // La navigation se fera automatiquement via App.tsx qui écoute isAuthenticated
+          console.log('✅ Authentication successful, navigation will happen automatically');
+        } else {
+          console.error('❌ No user data in response:', response);
+          Alert.alert('Erreur', 'Réponse invalide du serveur');
+        }
+      } else {
+        console.error('❌ No access token in response:', response);
+        Alert.alert('Erreur', 'Réponse invalide du serveur');
+      }
     } catch (error: any) {
-      Alert.alert('Erreur', error.response?.data?.message || 'Code OTP invalide');
+      console.error('OTP verification error:', error);
+      const errorMessage = error.response?.data?.message 
+        || error.message 
+        || 'Code OTP invalide';
+      Alert.alert('Erreur', errorMessage);
     } finally {
       setLoading(false);
     }

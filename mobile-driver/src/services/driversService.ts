@@ -29,4 +29,14 @@ export const driversService = {
     const response = await api.get('/drivers/profile');
     return response.data;
   },
+
+  async updateLocation(latitude: number, longitude: number) {
+    try {
+      const response = await api.post('/drivers/location', { latitude, longitude });
+      return response.data;
+    } catch (error: any) {
+      console.error('Error updating location:', error);
+      throw error;
+    }
+  },
 };

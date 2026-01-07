@@ -1,7 +1,7 @@
 {
-  "name": "vetigo-backend",
+  "name": "bissau-go-backend",
   "version": "1.0.0",
-  "description": "Backend API for Vetigo ride-sharing application",
+  "description": "Backend API for Bissau Go ride-sharing application",
   "author": "",
   "private": true,
   "license": "UNLICENSED",

@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Vetigo Client",
-    "slug": "vetigo-client",
-    "scheme": "vetigo-client",
+    "name": "Bissau Go Client",
+    "slug": "bissau-go-client",
+    "scheme": "bissau-go-client",
     "version": "1.0.0",
     "extra": {
       "apiUrl": "http://192.168.1.5:3008/api",
@@ -21,14 +21,14 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.vetigo.client"
+      "bundleIdentifier": "com.bissaugo.client"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.vetigo.client"
+      "package": "com.bissaugo.client"
     },
     "web": {
       "favicon": "./assets/favicon.png"

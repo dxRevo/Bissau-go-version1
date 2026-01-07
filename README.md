@@ -76,7 +76,7 @@ npm install
 cd backend
 
 # Créer la base de données PostgreSQL
-createdb vetigo_db
+createdb bissau_go
 
 # Configurer Prisma
 npx prisma generate
@@ -91,7 +91,7 @@ Créez un fichier `.env` dans le dossier `backend/` :
 
 ```env
 # Database
-DATABASE_URL="postgresql://user:password@localhost:5432/vetigo_db"
+DATABASE_URL="postgresql://user:password@localhost:5432/bissau_go"
 
 # JWT
 JWT_SECRET="your-super-secret-jwt-key-change-this-in-production"
@@ -170,7 +170,7 @@ npx ts-node scripts/create-admin.ts
 ```
 
 Cela crée un admin avec :
-- Email: `admin@vetigo.com`
+- Email: `admin@bissaugo.com`
 - Password: `admin123`
 
 ### 4. Démarrer le Dashboard
@@ -307,7 +307,7 @@ Le WebSocket est accessible sur `/realtime` (même port que l'API).
 
 ```bash
 # Vérifier que PostgreSQL est accessible
-psql -U postgres -d vetigo_db
+psql -U postgres -d bissau_go
 
 # Réinitialiser Prisma
 cd backend
@@ -390,4 +390,4 @@ Pour toute question ou problème, vérifiez :
 
 ---
 
-**Développé avec ❤️ pour Curry**
+**Développé avec ❤️ pour Bissau Go**

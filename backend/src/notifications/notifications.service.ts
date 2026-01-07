@@ -396,6 +396,37 @@ export class NotificationsService {
   /**
    * Notifier un client qu'un livreur a accepté sa livraison
    */
+  /**
+   * Notifier un client générique
+   */
+  async notifyClient(clientId: string, title: string, body: string, data?: any) {
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: clientId },
+        select: { fcmToken: true },
+      });
+
+      if (!user?.fcmToken) {
+        this.logger.warn(`No FCM token found for user ${clientId}`);
+        return;
+      }
+
+      const message = {
+        notification: {
+          title,
+          body,
+        },
+        data: data ? { ...data, type: data.type || 'GENERIC' } : {},
+        token: user.fcmToken,
+      };
+
+      await admin.messaging().send(message);
+      this.logger.log(`Notification sent to client ${clientId}: ${title}`);
+    } catch (error) {
+      this.logger.error(`Error sending notification to client ${clientId}:`, error);
+    }
+  }
+
   async notifyClientDeliveryAccepted(clientId: string, deliveryPersonName: string, deliveryId: string) {
     await this.sendNotification(
       clientId,

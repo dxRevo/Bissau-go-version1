@@ -13,6 +13,7 @@ import { driversService } from '../services/driversService';
 import { useAuthStore } from '../store/authStore';
 import { notificationsService } from '../services/notificationsService';
 import { websocketService } from '../services/websocketService';
+import ActiveRideIndicator from '../components/ActiveRideIndicator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
@@ -322,6 +323,9 @@ export default function HomeScreen({ navigation }: any) {
           />
         )}
       </MapView>
+
+      {/* Active Ride Indicator */}
+      <ActiveRideIndicator navigation={navigation} />
 
       {/* Top Bar */}
       <View style={styles.topBar}>

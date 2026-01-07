@@ -37,26 +37,71 @@ export default function BookRideScreen({ navigation }: any) {
       const activeRide = await ridesService.getActiveRide();
       if (activeRide) {
         setHasActiveRide(true);
+        
+        // Vérifier si la course peut être annulée
+        const canCancel = ['PENDING', 'ACCEPTED', 'DRIVER_ARRIVED'].includes(activeRide.status);
+        
         Alert.alert(
           'Course en cours',
-          'Vous avez déjà une course en cours. Veuillez l\'annuler ou la terminer avant d\'en créer une nouvelle.',
+          'Vous avez déjà une course en cours. Que souhaitez-vous faire ?',
           [
             {
-              text: 'Annuler',
-              style: 'cancel',
+              text: 'Annuler cette course',
+              style: canCancel ? 'destructive' : 'default',
+              onPress: async () => {
+                if (canCancel) {
+                  Alert.alert(
+                    'Confirmer l\'annulation',
+                    'Êtes-vous sûr de vouloir annuler cette course ?',
+                    [
+                      {
+                        text: 'Non',
+                        style: 'cancel',
+                      },
+                      {
+                        text: 'Oui, annuler',
+                        style: 'destructive',
+                        onPress: async () => {
+                          try {
+                            await ridesService.cancelRide(activeRide.id);
+                            setHasActiveRide(false);
+                            Alert.alert('Succès', 'La course a été annulée. Vous pouvez maintenant créer une nouvelle course.');
+                          } catch (error: any) {
+                            Alert.alert(
+                              'Erreur',
+                              error.response?.data?.message || 'Impossible d\'annuler la course. Veuillez réessayer.'
+                            );
+                          }
+                        },
+                      },
+                    ]
+                  );
+                } else {
+                  Alert.alert(
+                    'Annulation impossible',
+                    'Cette course ne peut plus être annulée car elle est en cours.',
+                    [{ text: 'OK' }]
+                  );
+                }
+              },
             },
             {
               text: 'Voir ma course',
               onPress: () => {
-                navigation.navigate('RideTracking', { rideId: activeRide.id });
+                // Naviguer vers l'écran de suivi et remplacer la stack pour éviter les retours
+                navigation.replace('RideTracking', { rideId: activeRide.id });
+              },
+            },
+            {
+              text: 'Retour',
+              style: 'cancel',
+              onPress: () => {
+                navigation.goBack();
               },
             },
           ],
+          { cancelable: false }
         );
-        // Retourner à l'écran précédent après un court délai
-        setTimeout(() => {
-          navigation.goBack();
-        }, 2000);
       }
     } catch (error) {
       // Pas de course active, continuer normalement
@@ -82,12 +127,20 @@ export default function BookRideScreen({ navigation }: any) {
     
     setCalculatingPrice(true);
     try {
-      const { distance, duration } = await googleMapsService.calculateDistanceAndDuration(
+      // Obtenir distance, durée et durée avec trafic
+      const { distance, duration, durationInTraffic } = await googleMapsService.calculateDistanceAndDuration(
         pickupLocation,
         dropoffLocation
       );
       
-      const estimate = pricingService.calculatePriceEstimate(distance, duration, vehicleType);
+      // Calculer le prix avec tous les facteurs (trafic, heure, demande)
+      const estimate = pricingService.calculatePriceEstimate(
+        distance, 
+        duration, 
+        vehicleType,
+        durationInTraffic
+      );
+      
       setPriceEstimate({
         distance: estimate.distance,
         duration: estimate.duration,
@@ -191,7 +244,7 @@ export default function BookRideScreen({ navigation }: any) {
             ridesService.getActiveRide()
               .then((activeRide) => {
                 if (activeRide) {
-                  navigation.navigate('RideTracking', { rideId: activeRide.id });
+                  navigation.replace('RideTracking', { rideId: activeRide.id });
                 }
               })
               .catch(() => {

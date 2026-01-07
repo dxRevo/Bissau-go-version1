@@ -3,6 +3,6 @@ import { Injectable } from '@nestjs/common';
 @Injectable()
 export class AppService {
   getHello(): string {
-    return 'Vetigo API is running!';
+    return 'Bissau Go API is running!';
   }
 }

@@ -92,6 +92,79 @@ export const googleMapsService = {
 
     return poly;
   },
+
+  /**
+   * Obtenir le nom de la rue à partir de coordonnées (reverse geocoding)
+   */
+  async getStreetName(latitude: number, longitude: number): Promise<string> {
+    if (!GOOGLE_MAPS_API_KEY) {
+      return '';
+    }
+
+    try {
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}&language=fr`
+      );
+      const data = await response.json();
+      
+      if (data.status === 'OK' && data.results && data.results.length > 0) {
+        // Chercher le nom de la rue dans les résultats
+        for (const result of data.results) {
+          const addressComponents = result.address_components;
+          for (const component of addressComponents) {
+            if (component.types.includes('route')) {
+              return component.long_name;
+            }
+          }
+        }
+        // Fallback: utiliser le formatted_address
+        return data.results[0].formatted_address.split(',')[0];
+      }
+      return '';
+    } catch (error) {
+      console.error('Error getting street name:', error);
+      return '';
+    }
+  },
+
+  /**
+   * Calculer la distance et le temps restant jusqu'à la destination
+   */
+  async getRouteInfo(
+    origin: { latitude: number; longitude: number },
+    destination: { latitude: number; longitude: number }
+  ): Promise<{ distance: number; duration: number } | null> {
+    if (!GOOGLE_MAPS_API_KEY) {
+      return null;
+    }
+
+    try {
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&key=${GOOGLE_MAPS_API_KEY}&mode=driving&language=fr`
+      );
+      const data = await response.json();
+      
+      if (data.status === 'OK' && data.routes && data.routes.length > 0) {
+        const route = data.routes[0];
+        let totalDistance = 0;
+        let totalDuration = 0;
+
+        route.legs.forEach((leg: any) => {
+          totalDistance += leg.distance.value; // en mètres
+          totalDuration += leg.duration.value; // en secondes
+        });
+
+        return {
+          distance: totalDistance / 1000, // convertir en km
+          duration: totalDuration / 60, // convertir en minutes
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting route info:', error);
+      return null;
+    }
+  },
 };
 
 
