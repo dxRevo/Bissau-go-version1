@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Vetigo Driver",
+    "slug": "vetigo-driver",
+    "scheme": "vetigo-driver",
+    "version": "1.0.0",
+    "extra": {
+      "apiUrl": "http://192.168.1.5:3008/api",
+      "googleMapsApiKey": "AIzaSyDA5mswj_MPpAbRBLmqfjJ8WxFD5CwOBjc"
+    },
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vetigo.driver"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.vetigo.driver"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Autoriser l'accès à votre localisation pour partager votre position avec les clients."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#ffffff"
+        }
+      ]
+    ]
+  }
+}

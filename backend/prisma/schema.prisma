@@ -1,0 +1,489 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CLIENT
+  DRIVER
+  DELIVERY
+  ADMIN
+  AGENT
+  SUPERVISOR
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VALIDATION
+}
+
+enum VehicleCategory {
+  ECO
+  CONFORT
+}
+
+enum DocumentType {
+  DRIVER_LICENSE
+  REGISTRATION_CARD
+  INSURANCE
+}
+
+enum DocumentStatus {
+  PENDING
+  VALIDATED
+  EXPIRED
+  REJECTED
+}
+
+enum RideStatus {
+  PENDING
+  ACCEPTED
+  DRIVER_ARRIVED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum DeliveryStatus {
+  PENDING
+  ACCEPTED
+  PICKED_UP
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  MOBILE_MONEY
+}
+
+enum TransactionType {
+  RECHARGE
+  COMMISSION
+  REFUND
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PaymentProvider {
+  WAVE
+  ORANGE_MONEY
+}
+
+// Users (Clients)
+model User {
+  id            String      @id @default(uuid())
+  phoneNumber   String      @unique
+  firstName     String?
+  lastName      String?
+  email         String?
+  role          UserRole    @default(CLIENT)
+  status        UserStatus  @default(ACTIVE)
+  avatar        String?
+  fcmToken      String?         // Firebase Cloud Messaging token
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // Relations
+  rides         Ride[]
+  deliveries    Delivery[]
+  payments      Payment[]
+
+  @@index([phoneNumber])
+  @@index([status])
+}
+
+// Drivers & Delivery Persons
+model Driver {
+  id                String          @id @default(uuid())
+  phoneNumber       String          @unique
+  firstName         String
+  lastName          String
+  email             String?
+  password          String          // Hashed password set by admin
+  role              UserRole        // DRIVER or DELIVERY
+  status            UserStatus      @default(PENDING_VALIDATION)
+  isOnline          Boolean         @default(false)
+  currentLatitude   Float?
+  currentLongitude  Float?
+  rating            Float           @default(0)
+  totalRides        Int             @default(0)
+  totalDeliveries   Int             @default(0)
+  earnings          Float           @default(0)
+  balance           Float           @default(0)  // Solde prépayé
+  minBalance        Float           @default(0)  // Solde minimum requis
+  fcmToken          String?         // Firebase Cloud Messaging token
+  
+  // Agency relation
+  agencyId          String?
+  agency            Agency?         @relation(fields: [agencyId], references: [id])
+  
+  // Created by agent
+  createdBy         String?         // Agent ID
+  validatedBy       String?         // Agent/Admin ID
+  validatedAt       DateTime?
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  // Relations
+  vehicle           Vehicle?
+  documents         Document[]
+  rides             Ride[]
+  deliveries        Delivery[]
+  payments          Payment[]
+  auditLogs         AuditLog[]
+  walletTransactions WalletTransaction[]
+
+  @@index([phoneNumber])
+  @@index([status])
+  @@index([isOnline])
+  @@index([agencyId])
+}
+
+// Vehicles
+model Vehicle {
+  id              String          @id @default(uuid())
+  driverId        String          @unique
+  driver          Driver          @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  
+  brand           String
+  model           String
+  year            Int
+  plateNumber     String          @unique
+  category        VehicleCategory
+  color           String?
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([plateNumber])
+  @@index([category])
+}
+
+// Documents (sans fichiers, juste métadonnées)
+model Document {
+  id              String          @id @default(uuid())
+  driverId        String
+  driver          Driver          @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  
+  type            DocumentType
+  number          String
+  expirationDate  DateTime
+  status          DocumentStatus  @default(PENDING)
+  
+  // Validation info
+  validatedBy     String?         // Agent/Admin ID
+  validatedAt     DateTime?
+  notes           String?
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([driverId])
+  @@index([status])
+  @@index([expirationDate])
+}
+
+// Agencies
+model Agency {
+  id              String          @id @default(uuid())
+  name            String
+  address         String
+  city            String
+  country         String
+  phoneNumber     String
+  email           String?
+  isActive        Boolean         @default(true)
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Relations
+  drivers         Driver[]
+  agents          AdminUser[]
+  rides           Ride[]
+  deliveries      Delivery[]
+
+  @@index([city])
+  @@index([isActive])
+}
+
+// Admin Users (Agents, Supervisors, Admins)
+model AdminUser {
+  id              String          @id @default(uuid())
+  email           String          @unique
+  password        String          // Hashed
+  firstName       String
+  lastName        String
+  role            UserRole        // ADMIN, AGENT, SUPERVISOR
+  agencyId        String?         // Agents belong to an agency
+  agency          Agency?         @relation(fields: [agencyId], references: [id])
+  isActive        Boolean         @default(true)
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  lastLoginAt     DateTime?
+
+  // Relations
+  auditLogs       AuditLog[]
+
+  @@index([email])
+  @@index([role])
+  @@index([agencyId])
+}
+
+// Rides (Courses VTC)
+model Ride {
+  id                  String          @id @default(uuid())
+  clientId            String
+  client              User            @relation(fields: [clientId], references: [id])
+  
+  driverId            String?
+  driver              Driver?         @relation(fields: [driverId], references: [id])
+  
+  agencyId            String?
+  agency              Agency?         @relation(fields: [agencyId], references: [id])
+  
+  status              RideStatus      @default(PENDING)
+  category            VehicleCategory
+  
+  // Pickup location
+  pickupLatitude      Float
+  pickupLongitude     Float
+  pickupAddress       String
+  
+  // Dropoff location
+  dropoffLatitude     Float
+  dropoffLongitude    Float
+  dropoffAddress      String
+  
+  // Pricing
+  distance            Float           // in km
+  duration            Int             // in minutes
+  basePrice           Float
+  distancePrice       Float
+  durationPrice       Float
+  totalPrice          Float
+  commission          Float           @default(0)
+  driverEarnings      Float           @default(0)
+  
+  // Timestamps
+  requestedAt         DateTime        @default(now())
+  acceptedAt          DateTime?
+  arrivedAt           DateTime?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  cancelledAt         DateTime?
+  cancellationReason  String?
+  
+  // Rating
+  clientRating        Int?
+  driverRating        Int?
+  clientComment       String?
+  driverComment       String?
+  
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  // Relations
+  payment             Payment?
+  walletTransaction   WalletTransaction?
+
+  @@index([clientId])
+  @@index([driverId])
+  @@index([status])
+  @@index([requestedAt])
+  @@index([agencyId])
+}
+
+// Deliveries (Livraisons)
+model Delivery {
+  id                  String          @id @default(uuid())
+  clientId            String
+  client              User            @relation(fields: [clientId], references: [id])
+  
+  deliveryPersonId    String?
+  deliveryPerson      Driver?         @relation(fields: [deliveryPersonId], references: [id])
+  
+  agencyId            String?
+  agency              Agency?         @relation(fields: [agencyId], references: [id])
+  
+  status              DeliveryStatus  @default(PENDING)
+  
+  // Pickup location
+  pickupLatitude      Float
+  pickupLongitude     Float
+  pickupAddress       String
+  pickupContactName   String?
+  pickupContactPhone  String?
+  
+  // Dropoff location
+  dropoffLatitude     Float
+  dropoffLongitude    Float
+  dropoffAddress      String
+  dropoffContactName  String
+  dropoffContactPhone String
+  
+  // Package info
+  packageDescription  String?
+  packageWeight       Float?          // in kg
+  estimatedValue      Float?
+  
+  // Pricing
+  distance            Float           // in km
+  duration            Int             // in minutes
+  basePrice           Float
+  distancePrice       Float
+  totalPrice          Float
+  commission          Float           @default(0)
+  deliveryEarnings    Float           @default(0)
+  
+  // Timestamps
+  requestedAt         DateTime        @default(now())
+  acceptedAt          DateTime?
+  pickedUpAt          DateTime?
+  startedAt           DateTime?
+  deliveredAt         DateTime?
+  cancelledAt         DateTime?
+  cancellationReason  String?
+  
+  // Rating
+  clientRating        Int?
+  deliveryRating      Int?
+  clientComment       String?
+  deliveryComment     String?
+  
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  // Relations
+  payment             Payment?
+
+  @@index([clientId])
+  @@index([deliveryPersonId])
+  @@index([status])
+  @@index([requestedAt])
+  @@index([agencyId])
+}
+
+// Payments
+model Payment {
+  id              String          @id @default(uuid())
+  rideId          String?         @unique
+  ride            Ride?            @relation(fields: [rideId], references: [id])
+  
+  deliveryId      String?         @unique
+  delivery        Delivery?       @relation(fields: [deliveryId], references: [id])
+  
+  userId          String?         // Client who paid
+  user            User?           @relation(fields: [userId], references: [id])
+  
+  driverId        String?
+  driver          Driver?         @relation(fields: [driverId], references: [id])
+  
+  amount          Float
+  method          PaymentMethod
+  status          PaymentStatus   @default(PENDING)
+  transactionId   String?
+  paidAt          DateTime?
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([driverId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Wallet Transactions
+model WalletTransaction {
+  id                String              @id @default(uuid())
+  driverId          String
+  driver            Driver              @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  
+  type              TransactionType
+  status            TransactionStatus   @default(PENDING)
+  amount            Float
+  balanceBefore     Float               // Solde avant transaction
+  balanceAfter      Float?              // Solde après transaction
+  
+  // For recharges
+  provider          PaymentProvider?
+  providerTransactionId String?         // ID de transaction Wave/Orange Money
+  phoneNumber       String?            // Phone number used for recharge
+  
+  // Metadata
+  description       String?
+  rideId            String?             @unique // If linked to a ride
+  ride              Ride?               @relation(fields: [rideId], references: [id])
+  
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  completedAt       DateTime?
+  
+  @@index([driverId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// Audit Logs (Actions des agents/admins)
+model AuditLog {
+  id              String          @id @default(uuid())
+  adminUserId     String
+  adminUser       AdminUser       @relation(fields: [adminUserId], references: [id])
+  
+  driverId        String?
+  driver          Driver?         @relation(fields: [driverId], references: [id])
+  
+  action          String          // CREATE_DRIVER, VALIDATE_DOCUMENT, SUSPEND_ACCOUNT, etc.
+  entityType      String          // DRIVER, DOCUMENT, RIDE, etc.
+  entityId        String?
+  details         Json?           // Additional data
+  ipAddress       String?
+  
+  createdAt       DateTime        @default(now())
+
+  @@index([adminUserId])
+  @@index([driverId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// Refresh Tokens
+model RefreshToken {
+  id              String          @id @default(uuid())
+  token           String          @unique
+  userId          String          // Can be User, Driver, or AdminUser ID
+  userType        String          // USER, DRIVER, ADMIN
+  expiresAt       DateTime
+  createdAt       DateTime        @default(now())
+
+  @@index([token])
+  @@index([userId, userType])
+}
