@@ -1,4 +1,4 @@
-# 🚗 Curry - Application de Transport et Livraison
+# 🚗 Application de Transport et Livraison
 
 Application complète de transport et livraison avec dashboard d'administration, applications mobiles client et conducteur, notifications push en temps réel et WebSocket.
 
@@ -390,6 +390,6 @@ Pour toute question ou problème, vérifiez :
 
 ---
 
-**Développé avec ❤️ pour Bissau Go**
+** Bissau Go**
 
 try it
