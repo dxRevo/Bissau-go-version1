@@ -6,7 +6,7 @@
     "version": "1.0.0",
     "extra": {
       "apiUrl": "http://192.168.1.5:3008/api",
-      "googleMapsApiKey": "AIzaSyDA5mswj_MPpAbRBLmqfjJ8WxFD5CwOBjc"
+      "googleMapsApiKey": ""
     },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
